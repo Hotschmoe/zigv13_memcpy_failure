@@ -56,8 +56,7 @@ export fn _start() callconv(.Naked) void {
         \\ 0:
         \\ wfe
         \\ b 0b
-        ::: "memory"
-    );
+        ::: "memory");
 }
 
 // Force 8-byte alignment but not 16-byte alignment
@@ -74,15 +73,6 @@ fn my_memcpy(dst: [*]u8, src: [*]const u8, len: usize) void {
 export fn main() void {
     // Print startup message
     printStr("Starting memcpy alignment test...\n");
-
-    // Print our current location
-    var pc: u64 = undefined;
-    asm volatile ("adr %[pc], ."
-        : [pc] "=r" (pc)
-    );
-    printStr("PC: 0x");
-    printHex(pc);
-    printStr("\n");
 
     // Initialize source with some data
     for (0..64) |i| {
@@ -127,13 +117,13 @@ export fn __vectors() align(0x800) callconv(.Naked) void {
 
 // UART registers for QEMU virt machine (PL011)
 const UART0_BASE: usize = 0x09000000;
-const UART0_DR: usize = UART0_BASE + 0x00;
-const UART0_FR: usize = UART0_BASE + 0x18;
-const UART0_IBRD: usize = UART0_BASE + 0x24;
-const UART0_FBRD: usize = UART0_BASE + 0x28;
-const UART0_LCRH: usize = UART0_BASE + 0x2C;
-const UART0_CR: usize = UART0_BASE + 0x30;
-const UART0_ICR: usize = UART0_BASE + 0x44;
+const UART0_DR: *volatile u8 = @ptrFromInt(UART0_BASE + 0x00); // Data register as u8
+const UART0_FR: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x18);
+const UART0_IBRD: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x24);
+const UART0_FBRD: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x28);
+const UART0_LCRH: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x2C);
+const UART0_CR: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x30);
+const UART0_ICR: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x44);
 
 // Control register bits
 const UART_LCRH_WLEN_8BIT: u32 = 3 << 5;
@@ -173,11 +163,11 @@ fn uart_init() void {
 
 fn uart_putc(c: u8) void {
     // Wait until UART is ready
-    while ((mmio_read(u32, UART0_FR) & UART_FR_TXFF) != 0) {
+    while ((UART0_FR.* & UART_FR_TXFF) != 0) {
         asm volatile ("" ::: "memory");
     }
-    // Write the character
-    mmio_write(u32, UART0_DR, c);
+    // Write the character as a byte
+    UART0_DR.* = c;
 }
 
 fn printStr(str: []const u8) void {
@@ -214,7 +204,7 @@ export fn handle_exception() callconv(.C) noreturn {
     // Get exception class from ESR_EL1
     var esr: u64 = undefined;
     asm volatile ("mrs %[esr], esr_el1"
-        : [esr] "=r" (esr)
+        : [esr] "=r" (esr),
         :
         : "memory"
     );
@@ -222,7 +212,7 @@ export fn handle_exception() callconv(.C) noreturn {
     // Get ELR_EL1 (where exception occurred)
     var elr: u64 = undefined;
     asm volatile ("mrs %[elr], elr_el1"
-        : [elr] "=r" (elr)
+        : [elr] "=r" (elr),
         :
         : "memory"
     );
@@ -230,50 +220,39 @@ export fn handle_exception() callconv(.C) noreturn {
     const ec = (esr >> 26) & 0x3f;
     const iss = esr & 0x1FFFFFF;
 
-    // Print directly to UART
-    const uart = @as(*volatile u32, @ptrFromInt(UART0_DR));
-    
-    // Print "EC: "
-    uart.* = 'E';
-    uart.* = 'C';
-    uart.* = ':';
-    uart.* = ' ';
-    
+    // Print in exact same format as before
     const hex = "0123456789ABCDEF";
-    uart.* = hex[(ec >> 4) & 0xF];
-    uart.* = hex[ec & 0xF];
-    uart.* = '\r';
-    uart.* = '\n';
+    uart_putc('E');
+    uart_putc('C');
+    uart_putc(':');
+    uart_putc(' ');
+    uart_putc(hex[(ec >> 4) & 0xF]);
+    uart_putc(hex[ec & 0xF]);
+    uart_putc('\n');
 
-    // Print "ELR: "
-    uart.* = 'E';
-    uart.* = 'L';
-    uart.* = 'R';
-    uart.* = ':';
-    uart.* = ' ';
-    
+    uart_putc('E');
+    uart_putc('L');
+    uart_putc('R');
+    uart_putc(':');
+    uart_putc(' ');
     var i: u6 = 60;
     while (true) : (i -= 4) {
-        uart.* = hex[@as(u4, @truncate((elr >> i) & 0xF))];
+        uart_putc(hex[@as(u4, @truncate((elr >> i) & 0xF))]);
         if (i == 0) break;
     }
-    uart.* = '\r';
-    uart.* = '\n';
+    uart_putc('\n');
 
-    // Print "ISS: "
-    uart.* = 'I';
-    uart.* = 'S';
-    uart.* = 'S';
-    uart.* = ':';
-    uart.* = ' ';
-
-    i = 24;  // ISS is 25 bits
+    uart_putc('I');
+    uart_putc('S');
+    uart_putc('S');
+    uart_putc(':');
+    uart_putc(' ');
+    i = 24; // ISS is 25 bits
     while (true) : (i -= 4) {
-        uart.* = hex[@as(u4, @truncate((iss >> i) & 0xF))];
+        uart_putc(hex[@as(u4, @truncate((iss >> i) & 0xF))]);
         if (i == 0) break;
     }
-    uart.* = '\r';
-    uart.* = '\n';
+    uart_putc('\n');
 
     // Make sure we properly halt
     asm volatile (
@@ -286,7 +265,6 @@ export fn handle_exception() callconv(.C) noreturn {
         \\ wfi
         \\ // Should never get here
         \\ 1: b 1b
-        ::: "memory"
-    );
+        ::: "memory");
     unreachable;
 }

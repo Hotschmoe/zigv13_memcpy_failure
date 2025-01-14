@@ -52,3 +52,110 @@ LLVM's auto-vectorization transforms the byte-by-byte implementation into SIMD i
 - Zig 0.13.0
 - AArch64 bare metal (EL1)
 - Tested on QEMU virt machine
+
+## Additional Notes
+
+In my actualy project, I get an EC = 0x25, which is a data abort from a misalgined memory read. But gdp points me to the memcpy implementation. The above test is the simplest way to reproduce the issue but we get a different EC than the actual project.
+
+regardless I *believe* this is the same issue. but I could be wrong. this is my first foray into kernel development.
+
+here is my total output from my own project: (I was testing fatal faults to verify we are in a good EL1 state, but this permission fault always throws a alignment fault. I tested alignment fault before this and handle it as expected)
+
+```
+Building for target CPU architecture: Target.Cpu.Arch.aarch64
+EL2 Init Complete
+Starting EL2 setup...
+Current EL: 00000002 (EL00000002)
+Setting up HCR_EL2...
+HCR_EL2 = 0x0000000080000038
+
+=== Testing EL2 Exception Handling ===
+VBAR_EL2 = 0x0000000040000000 - OK!
+HCR_EL2 = 0x0000000080000038
+Testing SVC in EL2:
+EL2 Exception:
+Type: Synchronous
+Source: EL2h
+ESR: 0x0000000056000000
+OK! (Returned from handler)
+=== EL2 Exception Test Complete ===
+
+Setting up translation tables...
+Translation tables configured.
+
+Kernel start address: 0x40000000
+  .text:  0x40004000 - 0x4002C070
+  .data:  0x4002C070 - 0x40030000
+  .bss:   0x40030000 - 0x40063000
+Kernel end address: 0x40063000
+
+Verifying translation tables:
+TTBR0 first 4 entries:
+  [00000000]: 0x0060000000000601
+  [00000001]: 0x0000000040000705
+  [00000002]: 0x0000000080000745
+  [00000003]: 0x0000000000000000
+TTBR1 first 4 entries:
+  [00000000]: 0x0000000000000000
+  [00000001]: 0x0000000000000000
+  [00000002]: 0x0000000000000000
+  [00000003]: 0x0000000000000000
+Configuring MMU registers...
+CPACR_EL1 = 0x0000000000300000 (SIMD/FP enabled)
+MAIR_EL1 = 0x0000FF00
+TCR_EL1 = 0xB5603520
+TTBR0_EL1 = 0x40043000
+TTBR1_EL1 = 0x40053000
+Ready to enable MMU and transition to EL1
+Calling enable_mmu() - Next stop kernel_main in EL1!
+
+ReclaimerOS Kernel Starting in EL1...
+If you see this, we've successfully transitioned to EL1!
+
+  Testing Fatal Permission Fault:
+  Triggering permission fault at 0x000000004002BF70...
+FATAL: Data abort (alignment fault) during read at 0x0000000040028889
+
+Exception Frame Dump:
+General Purpose Registers:
+x0: 0x000000004003AFB8
+x1: 0x0000000040028888
+x2: 0x0000000000000028
+x3: 0x0000000000000000
+x4: 0x0000000000000000
+x5: 0x0000000000000000
+x6: 0x0000000000000000
+x7: 0x0000000000000000
+x8: 0x0000000000000027
+x9: 0x0000000040028899
+x10: 0x0000000000000020
+x11: 0x000000004003AFC9
+x12: 0x0000000000000020
+x13: 0x0000000000000000
+x14: 0x0000000000000000
+x15: 0x0000000000000000
+x16: 0x0000000000000000
+x17: 0x0000000000000000
+x18: 0x0000000000000000
+x19: 0x0000000000000000
+x20: 0x0000000000000000
+x21: 0x0000000000000000
+x22: 0x0000000000000000
+x23: 0x0000000000000000
+x24: 0x0000000000000000
+x25: 0x0000000000000000
+x26: 0x0000000000000000
+x27: 0x0000000000000000
+x28: 0x0000000000000000
+x29: 0x000000004003AF40
+Special Registers:
+SP_EL0: 0x0000000000000000
+SP: 0x000000004003AF40
+ELR: 0x0000000040026DF4
+SPSR: 0x00000000200003C5
+FAR: 0x0000000040028889
+ESR: 0x0000000096000021
+
+System halted. Power cycle required.
+QEMU: Terminated
+```

@@ -19,6 +19,8 @@ While the Zig compiler_rt implementation in `compiler_rt/memcpy.zig` is a simple
 
 ## Reproduction
 
+https://github.com/Hotschmoe/zigv13_memcpy_failure
+
 The included code demonstrates the issue by:
 1. Setting up buffers with 8-byte alignment
 2. Enabling alignment checking in SCTLR_EL1
@@ -31,6 +33,7 @@ The included code demonstrates the issue by:
 3. Observe alignment fault with:
    - EC (Exception Class): 0x07
    - ISS: 0x1E00000
+
 (in repo you can run ```zig build run``` to see the fault)
 
 ## Expected Behavior

@@ -9,11 +9,6 @@ export fn _start() callconv(.Naked) void {
         \\ adr x0, __vectors
         \\ msr vbar_el1, x0
         \\
-        \\ // Enable alignment checking
-        \\ mrs x0, sctlr_el1
-        \\ orr x0, x0, #(1 << 1)  // Set A bit (alignment check)
-        \\ msr sctlr_el1, x0
-        \\
         \\ // Set up initial stack
         \\ ldr x0, =0x40100000    // Use a higher stack address
         \\ and x0, x0, #~15       // Ensure 16-byte alignment
@@ -33,13 +28,6 @@ export fn _start() callconv(.Naked) void {
 var source: [64]u8 align(8) = undefined;
 var dest: [64]u8 align(8) = undefined;
 
-// Simple memcpy implementation
-fn my_memcpy(dst: [*]u8, src: [*]const u8, len: usize) void {
-    for (0..len) |i| {
-        dst[i] = src[i];
-    }
-}
-
 export fn main() void {
     // Initialize UART first
     uart_init();
@@ -47,15 +35,24 @@ export fn main() void {
     // Print startup message
     printStr("Starting memcpy alignment test...\n");
 
+    // Enable alignment checking after UART is set up
+    asm volatile (
+        \\ mrs x0, sctlr_el1
+        \\ orr x0, x0, #(1 << 1)  // Set A bit (alignment check)
+        \\ msr sctlr_el1, x0
+        ::: "memory");
+
     // Initialize source with some data
     for (0..64) |i| {
         source[i] = @as(u8, @truncate(i));
     }
 
     printStr("Source initialized\n");
+    printStr("Alignment check enabled\n");
 
     // This should trigger the SIMD path (len > 0x20)
     // and cause an alignment fault
+    printStr("Testing Zig's memcpy...\n");
     @memcpy(dest[0..40], source[0..40]);
 
     // We shouldn't reach here due to alignment fault

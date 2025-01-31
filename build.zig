@@ -25,22 +25,34 @@ pub fn build(b: *std.Build) void {
         .strip = false,
     });
 
+    // exe.addAssemblyFile(b.path("memcpy_alternative.s"));
+
     exe.setLinkerScript(b.path("linker.ld"));
     b.installArtifact(exe);
 
     const run_cmd = b.addSystemCommand(&.{
         "qemu-system-aarch64",
-        "-machine", "virt",
-        "-cpu", "cortex-a72",
-        "-m", "128M",
+        "-machine",
+        "virt",
+        "-cpu",
+        "cortex-a72",
+        "-m",
+        "128M",
         "-nographic",
-        "-monitor", "none",
-        "-chardev", "stdio,id=uart0",
-        "-serial", "chardev:uart0",
-        "-d", "cpu_reset,guest_errors,unimp,in_asm",
-        "-D", "qemu.log",
-        "-smp", "1",
-        "-kernel", "zig-out/bin/memcpy_repro",
+        "-monitor",
+        "none",
+        "-chardev",
+        "stdio,id=uart0",
+        "-serial",
+        "chardev:uart0",
+        "-d",
+        "cpu_reset,guest_errors,unimp,in_asm",
+        "-D",
+        "qemu.log",
+        "-smp",
+        "1",
+        "-kernel",
+        "zig-out/bin/memcpy_repro",
     });
     run_cmd.step.dependOn(b.getInstallStep());
 

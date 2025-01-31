@@ -16,38 +16,8 @@ export fn _start() callconv(.Naked) void {
         \\
         \\ // Set up initial stack
         \\ ldr x0, =0x40100000    // Use a higher stack address
+        \\ and x0, x0, #~15       // Ensure 16-byte alignment
         \\ mov sp, x0
-        \\
-        \\ // Initialize UART first
-        \\ mov x0, #0              // Disable UART
-        \\ movz x1, #0x0900, lsl #16
-        \\ movk x1, #0x0030       // UART0_CR
-        \\ str w0, [x1]
-        \\
-        \\ mov w0, #13            // IBRD
-        \\ movz x1, #0x0900, lsl #16
-        \\ movk x1, #0x0024
-        \\ str w0, [x1]
-        \\
-        \\ mov w0, #1             // FBRD
-        \\ movz x1, #0x0900, lsl #16
-        \\ movk x1, #0x0028
-        \\ str w0, [x1]
-        \\
-        \\ mov w0, #0x70          // LCRH (8-bit, FIFO)
-        \\ movz x1, #0x0900, lsl #16
-        \\ movk x1, #0x002C
-        \\ str w0, [x1]
-        \\
-        \\ mov w0, #0x7FF         // Clear interrupts
-        \\ movz x1, #0x0900, lsl #16
-        \\ movk x1, #0x0044
-        \\ str w0, [x1]
-        \\
-        \\ mov w0, #0x301         // Enable UART
-        \\ movz x1, #0x0900, lsl #16
-        \\ movk x1, #0x0030
-        \\ str w0, [x1]
         \\
         \\ // Jump to main
         \\ bl main
@@ -71,6 +41,9 @@ fn my_memcpy(dst: [*]u8, src: [*]const u8, len: usize) void {
 }
 
 export fn main() void {
+    // Initialize UART first
+    uart_init();
+
     // Print startup message
     printStr("Starting memcpy alignment test...\n");
 
@@ -117,7 +90,7 @@ export fn __vectors() align(0x800) callconv(.Naked) void {
 
 // UART registers for QEMU virt machine (PL011)
 const UART0_BASE: usize = 0x09000000;
-const UART0_DR: *volatile u8 = @ptrFromInt(UART0_BASE + 0x00); // Data register as u8
+const UART0_DR: *volatile u8 = @ptrFromInt(UART0_BASE + 0x00); // Data register as u8 for character writes
 const UART0_FR: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x18);
 const UART0_IBRD: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x24);
 const UART0_FBRD: *align(4) volatile u32 = @ptrFromInt(UART0_BASE + 0x28);
@@ -144,43 +117,31 @@ fn mmio_read(comptime T: type, reg: usize) T {
 }
 
 fn uart_init() void {
-    // Disable UART before configuration
-    mmio_write(u32, UART0_CR, 0);
+    // Disable UART
+    mmio_write(u32, UART0_BASE + 0x30, 0);
 
-    // Configure for 115200 baud
-    mmio_write(u32, UART0_IBRD, 13);
-    mmio_write(u32, UART0_FBRD, 1);
+    // Set baud rate - 115200
+    mmio_write(u32, UART0_BASE + 0x24, 13); // IBRD
+    mmio_write(u32, UART0_BASE + 0x28, 1); // FBRD
 
-    // Enable FIFO & 8-bit data transmission
-    mmio_write(u32, UART0_LCRH, UART_LCRH_WLEN_8BIT | UART_LCRH_FEN);
+    // 8 bits, 1 stop bit, no parity, FIFO enabled
+    mmio_write(u32, UART0_BASE + 0x2C, 0x70);
 
-    // Clear pending interrupts
-    mmio_write(u32, UART0_ICR, 0x7FF);
-
-    // Enable UART, receive & transfer
-    mmio_write(u32, UART0_CR, UART_CR_UARTEN | UART_CR_TXE | UART_CR_RXE);
+    // Enable UART, RX, and TX
+    mmio_write(u32, UART0_BASE + 0x30, 0x301);
 }
 
 fn uart_putc(c: u8) void {
-    // Wait until UART is ready
-    while ((UART0_FR.* & UART_FR_TXFF) != 0) {
-        asm volatile ("" ::: "memory");
-    }
-    // Write the character as a byte
-    UART0_DR.* = c;
+    // Simple busy wait on the UART
+    while ((mmio_read(u32, UART0_BASE + 0x18) & (1 << 5)) != 0) {}
+    mmio_write(u8, UART0_BASE + 0x00, c);
 }
 
 fn printStr(str: []const u8) void {
-    // Save registers we'll use
-    asm volatile ("stp x29, x30, [sp, #-16]!");
-
     for (str) |c| {
         if (c == '\n') uart_putc('\r');
         uart_putc(c);
     }
-
-    // Restore registers
-    asm volatile ("ldp x29, x30, [sp], #16");
 }
 
 fn printHex(value: u64) void {

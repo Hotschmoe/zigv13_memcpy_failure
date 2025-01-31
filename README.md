@@ -34,7 +34,7 @@ The included code demonstrates the issue by:
    - EC (Exception Class): 0x07
    - ISS: 0x1E00000
 
-(in repo you can run ```zig build run``` to see the fault)
+(in repo you can run ```C:\zig-dev-3008\zig.exe build run``` to see the fault)
 
 ## Expected Behavior
 

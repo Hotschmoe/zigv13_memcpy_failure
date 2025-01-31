@@ -9,17 +9,23 @@ pub fn build(b: *std.Build) void {
             .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.cortex_a72 },
         },
     });
-    
-    const exe = b.addExecutable(.{
-        .name = "memcpy_repro",
+
+    const optimize = b.standardOptimizeOption(.{});
+
+    const root_module = b.createModule(.{
         .root_source_file = b.path("memcpy_repro.zig"),
         .target = target,
-        .linkage = .static,
-        .strip = false,
-        .optimize = .Debug,
+        .optimize = optimize,
     });
 
-    exe.setLinkerScriptPath(b.path("linker.ld"));
+    const exe = b.addExecutable(.{
+        .name = "memcpy_repro",
+        .root_module = root_module,
+        .linkage = .static,
+        .strip = false,
+    });
+
+    exe.setLinkerScript(b.path("linker.ld"));
     b.installArtifact(exe);
 
     const run_cmd = b.addSystemCommand(&.{

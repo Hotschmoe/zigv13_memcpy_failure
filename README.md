@@ -28,7 +28,7 @@ The included code demonstrates the issue by:
 4. Capturing the resulting alignment fault
 
 ### Running the Test
-1. Build with Zig 0.13.0
+1. Build with Zig 0.14.0-dev.3008
 2. Run under QEMU (aarch64-virt)
 3. Observe alignment fault with:
    - EC (Exception Class): 0x07
@@ -49,7 +49,7 @@ The implementation should either:
 LLVM's auto-vectorization transforms the byte-by-byte implementation into SIMD instructions without alignment checks, causing alignment faults when buffers aren't 16-byte aligned.
 
 ## Environment
-- Zig 0.13.0
+- Zig 0.14.0-dev.3008
 - AArch64 bare metal (EL1)
 - Tested on QEMU virt machine
 
